@@ -33,8 +33,10 @@ Recovery: `adb sideload 306kernels-redbull-*.zip` (accept the unsigned-zip
 prompt in Lineage recovery) or flash from the recovery's file picker.
 KernelFlasher also works from a booted system.
 
-Install the KernelSU-Next manager afterwards. For root hiding use the susfs
-module from the KernelSU-Next manager's module list (sidex15/susfs4ksu-module).
+Install the KernelSU-Next manager afterwards. The kernel side is sidex15's
+`legacy-susfs-v2` tree (v3.4.0-legacy, UAPI 4), so use the **v3.4.0** manager
+release; v3.4.1+ speak UAPI 5/6 and ksud will refuse to talk to this kernel.
+For root hiding use the susfs module (sidex15/susfs4ksu-module).
 
 ## Building
 
