@@ -1,0 +1,86 @@
+name: Build redbull kernel
+
+on:
+  push:
+    branches: ['17.0']
+    paths-ignore: ['**.md']
+  workflow_dispatch:
+    inputs:
+      release:
+        description: Publish a GitHub release with the zip
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+env:
+  CLANG_VER: clang-r596125
+  CLANG_TAG: android-17.0.0_r1
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - name: Free runner disk
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
+          df -h /
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Install build deps
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q bc bison flex libssl-dev libelf-dev lz4 cpio zip
+
+      - name: Cache clang
+        id: clang-cache
+        uses: actions/cache@v4
+        with:
+          path: toolchain/${{ env.CLANG_VER }}
+          key: ${{ env.CLANG_VER }}-${{ env.CLANG_TAG }}
+
+      # Same clang Lineage 24.0 uses for kernels (vendor/lineage release flag
+      # RELEASE_BUILD_CLANG_VERSION), pulled as a subdir archive from googlesource.
+      - name: Fetch clang
+        if: steps.clang-cache.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p "toolchain/$CLANG_VER"
+          curl -sSL "https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/tags/$CLANG_TAG/$CLANG_VER.tar.gz" \
+            | tar -xz -C "toolchain/$CLANG_VER"
+          "toolchain/$CLANG_VER/bin/clang" --version | head -1
+
+      - name: Build
+        env:
+          CLANG_BIN: ${{ github.workspace }}/toolchain/${{ env.CLANG_VER }}/bin
+        run: |
+          .github/ci/build.sh . "$RUNNER_TEMP/out" "$RUNNER_TEMP/stage"
+
+      - name: Package
+        id: pkg
+        run: |
+          ver=$(cat "$RUNNER_TEMP/stage/version.txt")
+          name="306kernels-redbull-${ver}-$(date -u +%Y%m%d)-${GITHUB_SHA::7}"
+          .github/ci/package.sh "$RUNNER_TEMP/stage" "$RUNNER_TEMP/$name.zip"
+          echo "name=$name" >> "$GITHUB_OUTPUT"
+          echo "ver=$ver" >> "$GITHUB_OUTPUT"
+          echo "zip=$RUNNER_TEMP/$name.zip" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.pkg.outputs.name }}
+          path: ${{ steps.pkg.outputs.zip }}
+          compression-level: 0
+
+      - name: Release
+        if: github.event_name == 'workflow_dispatch' && inputs.release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ steps.pkg.outputs.name }}" "${{ steps.pkg.outputs.zip }}" \
+            --title "${{ steps.pkg.outputs.name }}" \
+            --notes "$(printf 'Kernel: %s\nSource: %s\n\nFlash in recovery or with KernelFlasher. The zip replaces boot, the vendor_boot first-stage modules and /vendor/lib/modules. Re-flash after every ROM update.' "${{ steps.pkg.outputs.ver }}" "$GITHUB_SHA")"
