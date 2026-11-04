@@ -66,9 +66,11 @@ jobs:
           ver=$(cat "$RUNNER_TEMP/stage/version.txt")
           name="306kernels-redbull-${ver}-$(date -u +%Y%m%d)-${GITHUB_SHA::7}"
           .github/ci/package.sh "$RUNNER_TEMP/stage" "$RUNNER_TEMP/$name.zip"
-          echo "name=$name" >> "$GITHUB_OUTPUT"
-          echo "ver=$ver" >> "$GITHUB_OUTPUT"
-          echo "zip=$RUNNER_TEMP/$name.zip" >> "$GITHUB_OUTPUT"
+          {
+            echo "name=$name"
+            echo "ver=$ver"
+            echo "zip=$RUNNER_TEMP/$name.zip"
+          } >> "$GITHUB_OUTPUT"
 
       - uses: actions/upload-artifact@v4
         with:
