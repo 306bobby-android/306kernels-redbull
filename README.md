@@ -16,16 +16,30 @@ It is meant for crDroid 17 and LineageOS 24.0 builds of these devices.
 | `vendor_boot` ramdisk `lib/modules/*.ko` | first-stage modules | built with this kernel |
 | `/vendor/lib/modules/*.ko` | all other modules | built with this kernel |
 
-The ROM's own modules cannot be reused: the Droidspaces cgroup/IPC options
-(`FAIR_GROUP_SCHED`, `CGROUP_DEVICE`, `CGROUP_PIDS`, `POSIX_MQUEUE`, ...)
-change core struct layouts, so the MODVERSIONS CRCs of ~80% of exported
-symbols differ from a stock Lineage build. Shipping the matching module set
-is what keeps Wi-Fi, touch, audio and the rest working.
+The zip ships one copy of every module the build produces. The installer
+runs in this order, and nothing is flashed until the checks pass:
 
-Because `/vendor` is written, the ROM must have AVB verification disabled
-(`vbmeta --flags 3`), which stock LineageOS and crDroid builds do, and `/vendor`
-must be ext4. After any ROM update, flash the zip again: the OTA restores the
-stock kernel and modules together.
+1. Pre-flight: `/vendor` must be mounted ext4, every `.ko` in
+   `/vendor/lib/modules` must exist in the zip, and the module swap must fit.
+2. `vendor_boot`: every `.ko` the ROM keeps in the ramdisk is replaced in
+   place; `modules.load`/`modules.dep` and the DTB are untouched.
+3. `boot`: the kernel is swapped, the generic ramdisk is untouched.
+4. `/vendor/lib/modules`: each file is overwritten in place (same inode, so
+   the SELinux label survives), largest shrink first.
+
+Step 4 needs care. Lineage's vendor image ships with ~2 MB free and the
+kernel keeps 2% of any ext4 filesystem (15 MB here) back for metadata, which
+no normal write may use, so a naive copy fails with ENOSPC on the first
+module. The installer drops that reservation via
+`/sys/fs/ext4/<dev>/reserved_clusters` for the duration of the copy and
+restores it afterwards; the pre-flight simulates the copy sequence against
+the raw free space and aborts if any step would run short.
+
+Checked against the LineageOS 24.0 redfin build of 2026-11-02 by running the
+installer in a container against its `boot`, `vendor_boot` and `vendor`
+images: the module sets match name for name, `depmod` yields identical
+dependency, alias and softdep tables (so the ROM's `modules.*` stay valid),
+and all 221 + 329 modules come out byte-identical to the build.
 
 ## Flashing
 
