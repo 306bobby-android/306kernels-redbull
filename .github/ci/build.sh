@@ -6,7 +6,7 @@
 # usage: build.sh <kernel-tree> <out-dir> <stage-dir>
 # env:   CLANG_BIN (required) - path to the AOSP clang bin dir
 #        LOCALVERSION         - version suffix, default -306kernels
-#        KERNEL_LTO           - full (defconfig) or thin, default thin
+#        KERNEL_LTO           - full (defconfig, default) or thin
 set -euo pipefail
 TREE=$(realpath "$1"); OUT=$(realpath -m "$2"); STAGE=$(realpath -m "$3")
 : "${CLANG_BIN:?set CLANG_BIN to the clang bin dir}"
@@ -18,10 +18,10 @@ export KBUILD_BUILD_USER=306kernels KBUILD_BUILD_HOST=github
 MK=(make -C "$TREE" O="$OUT" ARCH=arm64 LLVM=1 LLVM_IAS=1 -j"$(nproc)")
 
 "${MK[@]}" redbull_defconfig
-# Full LTO links vmlinux in one ld.lld that peaks past 8 GB; ThinLTO stays
-# under what a GitHub runner has. Same knob vendor/lineage's kernel.mk exposes
-# as KERNEL_LTO; codegen only, no ABI change.
-if [ "${KERNEL_LTO:-thin}" = thin ]; then
+# Full LTO is what the defconfig and the ROM builds use; its single ld.lld
+# link needs ~10 GB, so the workflow adds swap. Same knob vendor/lineage's
+# kernel.mk exposes as KERNEL_LTO; codegen only, no ABI change.
+if [ "${KERNEL_LTO:-full}" = thin ]; then
   "$TREE/scripts/config" --file "$OUT/.config" -e THINLTO
   "${MK[@]}" olddefconfig
 fi
