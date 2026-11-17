@@ -36,7 +36,7 @@ jobs:
       - name: Swap for the LTO link
         uses: pierotofy/set-swap-space@master
         with:
-          swap-size-gb: 12
+          swap-size-gb: 16
 
       - uses: actions/checkout@v4
         with:
@@ -68,7 +68,13 @@ jobs:
         env:
           CLANG_BIN: ${{ github.workspace }}/toolchain/${{ env.CLANG_VER }}/bin
           KERNEL_LTO: ${{ inputs.lto || 'full' }}
+        # The ld.lld link swaps hard enough to starve the runner agent, and GitHub
+        # then kills the VM ("lost communication with the server"). Cap the build
+        # in its own cgroup so the agent keeps RAM and only the link pages out.
         run: |
+          sudo mkdir -p /sys/fs/cgroup/kbuild
+          echo 12G | sudo tee /sys/fs/cgroup/kbuild/memory.max
+          echo $$ | sudo tee /sys/fs/cgroup/kbuild/cgroup.procs
           .github/ci/build.sh . "$RUNNER_TEMP/out" "$RUNNER_TEMP/stage"
 
       - name: Package
