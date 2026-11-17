@@ -689,13 +689,13 @@ error:
 }
 
 #ifdef CONFIG_KSU
-extern int ksu_handle_setresuid(uid_t ruid, uid_t euid, uid_t suid);
+extern int ksu_handle_setresuid(uid_t old_uid, uid_t new_uid);
 #endif
 
 SYSCALL_DEFINE3(setresuid, uid_t, ruid, uid_t, euid, uid_t, suid)
 {
 #ifdef CONFIG_KSU_SUSFS
-	if (ksu_handle_setresuid(ruid, euid, suid)) {
+	if (ksu_handle_setresuid(current_uid().val, ruid)) {
 		pr_info("Something wrong with ksu_handle_setresuid()\\n");
 	}
 #endif
